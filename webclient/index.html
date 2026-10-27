@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Criminal Law Decision Tree</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            padding: 2rem;
+            max-width: 600px;
+            margin: auto;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: .3rem;
+            font-weight: 500;
+        }
+
+        select, input[type="text"] {
+            width: 100%;
+            padding: .5rem;
+            box-sizing: border-box;
+        }
+
+        button {
+            margin-right: .5rem;
+            padding: .6rem 1.2rem;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .results-box {
+            margin-top: 20px;
+            padding: 1rem;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+
+        ul { padding-left: 20px; }
+        li { margin-bottom: .4rem; }
+
+        .end-banner {
+            list-style: none;
+            margin-left: -20px;
+            padding: 10px;
+            border-radius: 6px;
+            background: #e6f4ea;
+            border: 1px solid #34a853;
+            color: #0d652d;
+        }
+        .end-banner.warn { background: #fff4e5; border-color: #f29900; color: #7a4a00; }
+        .source-note { display: block; font-size: .8rem; font-weight: normal; margin-top: .2rem; }
+        .node-id { font-family: ui-monospace, Consolas, monospace; font-size: .8rem; color: #666; }
+        .answer { display: block; color: #137333; }
+        .path { font-family: ui-monospace, Consolas, monospace; font-size: .85rem; word-break: break-word; }
+        .error-text { color: #c5221f; }
+    </style>
+</head>
+
+<body>
+    <h1>Criminal Law Decision Tree</h1>
+    <p>Fill out the case parameters below, submit the process, and retrieve your results.</p>
+
+    <!-- Interactive Form -->
+    <form id="case-form">
+        <div class="form-group">
+            <label><input type="checkbox" id="did_Victim_Die"> Did Victim Die?</label>
+        </div>
+
+        <div class="form-group">
+            <label for="degree_Of_Act">Degree of Act:</label>
+            <select id="degree_Of_Act">
+                <option value="Severe_And_Serious">Severe And Serious</option>
+                <option value="Less_Severe">Less Severe</option>
+                <option value="Negligent">Negligent</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label><input type="checkbox" id="was_There_Intent"> Was There Intent?</label>
+        </div>
+
+        <div class="form-group">
+            <label><input type="checkbox" id="was_There_Negligence"> Was There Negligence?</label>
+        </div>
+
+        <div class="form-group">
+            <label><input type="checkbox" id="was_There_Justification"> Was There Justification?</label>
+        </div>
+
+        <div class="form-group">
+            <label><input type="checkbox" id="was_Justification_Exceeded"> Was Justification Exceeded?</label>
+        </div>
+
+        <div class="form-group">
+            <label><input type="checkbox" id="are_There_Circumstances_Affecting_Responsibility"> Circumstances Affecting Responsibility?</label>
+        </div>
+
+        <div class="form-group">
+            <label for="severity_Of_Circumstances">Severity of Circumstances:</label>
+            <select id="severity_Of_Circumstances">
+                <option value="Normal">Normal</option>
+                <option value="Aggravated">Aggravated</option>
+            </select>
+        </div>
+
+        <button type="button" id="btn1">1. Submit Case</button>
+        <button type="button" id="btn2">2. Get Results</button>
+    </form>
+
+    <div class="results-box">
+        <h3>Evaluation Results</h3>
+        <ul id="results-list">
+            <li><em>No results loaded yet.</em></li>
+        </ul>
+    </div>
+
+    <script>
+        const API = "http://localhost:4000";
+        const btn1 = document.getElementById('btn1');
+        const btn2 = document.getElementById('btn2');
+        const resultsList = document.getElementById('results-list');
+        let currentInstanceKey = "";
+
+        // Optional: variable that the BPMN model may set before each end event.
+        // If it exists, Camunda's value is used and checked against the model.
+        const OUTCOME_VAR = "outcome";
+
+        // Variables the form sends (data dictionary)
+        const INPUTS = [
+            "did_Victim_Die", "degree_Of_Act", "was_There_Intent", "was_There_Negligence",
+            "was_There_Justification", "was_Justification_Exceeded",
+            "are_There_Circumstances_Affecting_Responsibility", "severity_Of_Circumstances"
+        ];
+
+        // Allowed enum values (data dictionary)
+        const ENUMS = {
+            degree_Of_Act: ["Severe_And_Serious", "Less_Severe", "Negligent"],
+            severity_Of_Circumstances: ["Normal", "Aggravated"]
+        };
+
+        // ---------- Decision model: the nodes and flows of the BPMN process Process_1dpwcse ----------
+        // Only data is stored here. The code that walks the model (buildModel) is generic.
+        // NODES: id -> [type, text]   FLOWS: [from, to, label, condition]
+        const NODES = {
+            StartEvent_085o7t7: ["start", "Is this person liable for murder?"],
+            Gateway_VictimDeath: ["gateway", "What did the person actually do?"],
+            Gateway_DegreeOfAct: ["gateway", "Does the act fulfil all the objective elements required by the relevant criminal provision?"],
+            Gateway_Intent: ["gateway", "Was there clear intent in the action?"],
+            Gateway_Negligence: ["gateway", "Was there negligence?"],
+            Gateway_Justification: ["gateway", "Was there a justification, such as self-defence or necessity?"],
+            Gateway_JustificationExceeded: ["gateway", "Did the person exceed the limits of that justification?"],
+            Gateway_JoinAfterJustification: ["gateway", ""],
+            Gateway_Responsibility: ["gateway", "Were there any circumstances affecting the person's individual criminal responsibility, such as age or other personal conditions?"],
+            Gateway_SeverityOfCircumstances: ["gateway", "If the person is criminally liable, what offence has been committed, how serious is it, and what penalty or sanction should be imposed?"],
+            Event_16jss2h: ["end", "OUT_InvoluntaryManslaughterNoIntent"],
+            Event_0idkjrw: ["end", "OUT_NotLiable"],
+            Event_1mcygb2: ["end", "OUT_OutOfScope"],
+            Event_07tiomd: ["end", "OUT_FixedTermImprisonment"],
+            Event_0m71xzs: ["end", "OUT_LifeImprisonment"],
+            Event_1w1tcwf: ["end", "OUT_Manslaughter"],
+            Event_14u1ru0: ["end", "OUT_InvoluntaryManslaughterNegligentAct"],
+            Event_1mki7bk: ["end", "OUT_MurderNotCommited"],
+            Event_10s6doo: ["end", "OUT_OutOfScope"]
+        };
+
+        const FLOWS = [
+            ["StartEvent_085o7t7", "Gateway_VictimDeath", "", ""],
+            ["Gateway_VictimDeath", "Gateway_DegreeOfAct", "Done an action resulting in the death of a person", "=did_Victim_Die = true"],
+            ["Gateway_VictimDeath", "Event_1mki7bk", "Done an action where the other person was severely injured or harmed but still alive", "=did_Victim_Die = false"],
+            ["Gateway_DegreeOfAct", "Gateway_Intent", "Severe and serious act that constitutes murder", '=degree_Of_Act = "Severe_And_Serious"'],
+            ["Gateway_DegreeOfAct", "Event_1w1tcwf", "Less severe/serious because of the circumstance", '=degree_Of_Act = "Less_Severe"'],
+            ["Gateway_DegreeOfAct", "Event_14u1ru0", "The action was negligent", '=degree_Of_Act = "Negligent"'],
+            ["Gateway_Intent", "Gateway_Negligence", "No", "=was_There_Intent = false"],
+            ["Gateway_Intent", "Gateway_Justification", "Yes", "=was_There_Intent = true"],
+            ["Gateway_Negligence", "Event_0idkjrw", "No", "=was_There_Negligence = false"],
+            ["Gateway_Negligence", "Event_16jss2h", "Yes", "=was_There_Negligence = true"],
+            ["Gateway_Justification", "Gateway_JustificationExceeded", "Yes", "=was_There_Justification = true"],
+            ["Gateway_Justification", "Gateway_JoinAfterJustification", "No", "=was_There_Justification = false"],
+            ["Gateway_JustificationExceeded", "Event_10s6doo", "No", "=was_Justification_Exceeded = false"],
+            ["Gateway_JustificationExceeded", "Gateway_JoinAfterJustification", "Yes", "=was_Justification_Exceeded = true"],
+            ["Gateway_JoinAfterJustification", "Gateway_Responsibility", "", ""],
+            ["Gateway_Responsibility", "Gateway_SeverityOfCircumstances", "No", "=are_There_Circumstances_Affecting_Responsibility = false"],
+            ["Gateway_Responsibility", "Event_1mcygb2", "Yes", "=are_There_Circumstances_Affecting_Responsibility = true"],
+            ["Gateway_SeverityOfCircumstances", "Event_07tiomd", "Normal gravity or degree", '=severity_Of_Circumstances = "Normal"'],
+            ["Gateway_SeverityOfCircumstances", "Event_0m71xzs", "Aggravated / planned / ruthless", '=severity_Of_Circumstances = "Aggravated"']
+        ];
+
+        function buildModel(nodes, flows) {
+            const startId = Object.keys(nodes).find(id => nodes[id][0] === "start");
+
+            // Supports the conditions used in the model: =variable = true / false / "Text"
+            function holds(cond, vars) {
+                const m = /^=\s*([A-Za-z_]\w*)\s*=\s*(true|false|"[^"]*")\s*$/.exec(cond.trim());
+                if (!m) throw new Error(`Unsupported condition: ${cond}`);
+                return vars[m[1]] === JSON.parse(m[2]);
+            }
+
+            // Returns the node IDs visited, from the start event to an end event
+            function trace(vars) {
+                const path = [startId];
+                let current = startId;
+                for (let i = 0; i < 100 && nodes[current][0] !== "end"; i++) {
+                    const outgoing = flows.filter(f => f[0] === current);
+                    const chosen = (outgoing.length === 1 && !outgoing[0][3])
+                        ? outgoing[0]
+                        : outgoing.find(f => f[3] && holds(f[3], vars));
+                    if (!chosen) throw new Error(`No outgoing flow matches at ${current} (Camunda would raise an incident).`);
+                    current = chosen[1];
+                    path.push(current);
+                }
+                return path;
+            }
+
+            return {
+                trace,
+                label: id => nodes[id][1] || "Paths merge (no decision)",
+                branch: (from, to) => (flows.find(f => f[0] === from && f[1] === to) || [])[2] || ""
+            };
+        }
+
+        const MODEL = buildModel(NODES, FLOWS);
+
+        // ---------- helpers ----------
+        function addLi(text, className) {
+            const li = document.createElement('li');
+            if (className) li.className = className;
+            li.textContent = text;
+            resultsList.appendChild(li);
+            return li;
+        }
+
+        // Validate the form values against the data dictionary
+        function validate(variables) {
+            const errors = [];
+            for (const [name, allowed] of Object.entries(ENUMS)) {
+                if (!allowed.includes(variables[name])) {
+                    errors.push(`${name}: value must be one of ${allowed.join(", ")}.`);
+                }
+            }
+            if (variables.was_Justification_Exceeded && !variables.was_There_Justification) {
+                errors.push("was_Justification_Exceeded: a justification can only be exceeded if there was a justification.");
+            }
+            return errors;
+        }
+
+        // Button 1: Submit Form Data to Camunda
+        btn1.addEventListener('click', async () => {
+            currentInstanceKey = "";
+            resultsList.innerHTML = "<li>Submitting case...</li>";
+
+            // Read values dynamically from form inputs
+            const variables = {
+                "did_Victim_Die": document.getElementById('did_Victim_Die').checked,
+                "degree_Of_Act": document.getElementById('degree_Of_Act').value,
+                "was_There_Intent": document.getElementById('was_There_Intent').checked,
+                "was_There_Negligence": document.getElementById('was_There_Negligence').checked,
+                "was_There_Justification": document.getElementById('was_There_Justification').checked,
+                "was_Justification_Exceeded": document.getElementById('was_Justification_Exceeded').checked,
+                "are_There_Circumstances_Affecting_Responsibility": document.getElementById('are_There_Circumstances_Affecting_Responsibility').checked,
+                "severity_Of_Circumstances": document.getElementById('severity_Of_Circumstances').value
+            };
+
+            const errors = validate(variables);
+            if (errors.length) {
+                resultsList.innerHTML = "";
+                errors.forEach(e => addLi(e, "error-text"));
+                return;
+            }
+
+            const payload = { "processDefinitionId": "Process_1dpwcse", "variables": variables };
+
+            try {
+                const response = await fetch(`${API}/api/camunda`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
+                const data = await response.json();
+                if (data.processInstanceKey) {
+                    currentInstanceKey = data.processInstanceKey;
+                    resultsList.innerHTML = `<li><strong>Case Submitted!</strong> Key: ${currentInstanceKey}. Click Button 2 to view the result.</li>`;
+                }
+            } catch (err) {
+                console.error("Error in Button 1:", err);
+                resultsList.innerHTML = `<li class="error-text">Error starting process. Check console.</li>`;
+            }
+        });
+
+        // Reads the instance's variables; waits until all case parameters are available
+        // (the search index lags a bit behind the process)
+        async function fetchVariables(key, tries = 10, delayMs = 500) {
+            let vars = {};
+            for (let i = 0; i < tries; i++) {
+                const response = await fetch(`${API}/api/result`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ filter: { processInstanceKey: key }, page: { limit: 100 } }),
+                });
+                if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+                const data = await response.json();
+
+                vars = {};
+                (data.items || []).forEach(item => {
+                    try { vars[item.name] = JSON.parse(item.value); }
+                    catch { vars[item.name] = item.value; }
+                });
+                if (INPUTS.every(n => vars[n] !== undefined)) break;
+                await new Promise(r => setTimeout(r, delayMs));
+            }
+            return vars;
+        }
+
+        // Button 2: Fetch and display the result
+        btn2.addEventListener('click', async () => {
+            if (!currentInstanceKey) {
+                alert("Please submit a case first!");
+                return;
+            }
+
+            resultsList.innerHTML = "<li>Evaluating case in Camunda...</li>";
+
+            try {
+                const vars = await fetchVariables(currentInstanceKey);
+                const model = MODEL;
+                resultsList.innerHTML = "";
+
+                if (!INPUTS.every(n => vars[n] !== undefined)) {
+                    addLi("⚠️ Camunda has not returned the case parameters yet. Wait a moment and click Button 2 again.", "end-banner warn");
+                    return;
+                }
+
+                const ids = model.trace(vars);
+                const endId = ids[ids.length - 1];
+                const modelOutcome = model.label(endId);
+                const camundaOutcome = vars[OUTCOME_VAR];
+
+                // 1. End event message
+                const banner = addLi("", "end-banner");
+                banner.innerHTML = "<strong>✅ End event reached:</strong><br>";
+                const out = document.createElement('strong');
+                out.style.fontSize = "1.3em";
+                out.textContent = camundaOutcome !== undefined ? camundaOutcome : modelOutcome;
+                const note = document.createElement('span');
+                note.className = "source-note";
+                note.textContent = camundaOutcome !== undefined
+                    ? "Confirmed by the outcome variable from Camunda."
+                    : "Worked out from the decision model in this page (a copy of the BPMN process) and the case parameters.";
+                banner.append(out, note);
+
+                if (camundaOutcome !== undefined && camundaOutcome !== modelOutcome) {
+                    addLi(`⚠️ The decision model in this page ends in ${modelOutcome}, but Camunda returned ${camundaOutcome}. The page and the deployed BPMN model are out of sync.`, "end-banner warn");
+                }
+
+                // 2. Decision path (node IDs)
+                const pathLi = addLi("", null);
+                pathLi.innerHTML = "<strong>Decision path:</strong><br>";
+                const p = document.createElement('span');
+                p.className = "path";
+                p.textContent = ids.join(" → ");
+                pathLi.appendChild(p);
+
+                // 3. Supportive text per step
+                addLi("", null).innerHTML = "<strong>Why this path:</strong>";
+                ids.forEach((nid, i) => {
+                    const li = addLi("", null);
+                    const q = document.createElement('span');
+                    q.textContent = model.label(nid);
+                    const code = document.createElement('span');
+                    code.className = "node-id";
+                    code.textContent = "  " + nid;
+                    li.append(q, code);
+                    const branch = ids[i + 1] && model.branch(nid, ids[i + 1]);
+                    if (branch) {
+                        const ans = document.createElement('span');
+                        ans.className = "answer";
+                        ans.textContent = "→ " + branch;
+                        li.appendChild(ans);
+                    }
+                });
+
+                // 4. Input variables (as before)
+                addLi("", null).innerHTML = "<strong>Case parameters evaluated:</strong>";
+                INPUTS.forEach(name => {
+                    const li = addLi(`${name}: ${vars[name]}`, null);
+                    li.style.fontSize = "0.9em";
+                    li.style.color = "#555";
+                });
+            } catch (err) {
+                console.error("Error in Button 2:", err);
+                resultsList.innerHTML = "";
+                addLi("Error: " + err.message, "error-text");
+            }
+        });
+    </script>
+</body>
+
+</html>

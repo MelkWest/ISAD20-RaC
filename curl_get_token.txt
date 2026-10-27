@@ -1,0 +1,8 @@
+curl -X POST "https://login.cloud.camunda.io/oauth/token" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "client_id": "[your-client-id]",
+        "client_secret": "[your-client-secret]",
+        "audience": "zeebe.camunda.io",
+        "grant_type": "client_credentials"
+      }'
